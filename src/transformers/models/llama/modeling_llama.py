@@ -716,12 +716,14 @@ class LlamaDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
         )
+        # 残差连接
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        # 残差连接
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -871,6 +873,7 @@ class LlamaModel(LlamaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
+        ## https://pytorch.org/docs/stable/generated/torch.nn.Embedding.html
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -1084,7 +1087,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         return causal_mask
 
-
+## https://huggingface.co/docs/transformers/main/en/model_doc/llama#transformers.LlamaForCausalLM
 class LlamaForCausalLM(LlamaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1119,10 +1122,25 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
+        ## input_ids 的说明：https://huggingface.co/docs/transformers/main/en/glossary#input-ids
+        ## shape (batch_size, sequence_length)
         input_ids: torch.LongTensor = None,
+        ## attention_mask 的说明：https://huggingface.co/docs/transformers/main/en/glossary#attention-mask
+        ## shape (batch_size, sequence_length)
         attention_mask: Optional[torch.Tensor] = None,
+        ## position_ids shape (batch_size, sequence_length)
         position_ids: Optional[torch.LongTensor] = None,
+        ## past_key_values:
+        ## Tuple of tuple(torch.FloatTensor) of length config.n_layers, with each tuple having 2 tensors
+        ## of shape (batch_size, num_heads, sequence_length, embed_size_per_head)). This is also known as
+        ## the legacy cache format.
+        ## past_key_values 就是 KV cache, 使能了 KV cache 才能进行增量推理, 如下所述:
+        ## If past_key_values are used, the user can optionally input only the last input_ids (those that
+        ## don’t have their past key value states given to this model) of shape (batch_size, 1) instead of
+        ## all input_ids of shape (batch_size, sequence_length).
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        ## inputs_embeds shape: (batch_size, sequence_length, hidden_size)
+        ## 可以选择传 input_ids（即 tokens），也可以选择传 inputs_embeds，即已经完成 embedding
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
